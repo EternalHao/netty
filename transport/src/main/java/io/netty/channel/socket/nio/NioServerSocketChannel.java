@@ -131,6 +131,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     @Override
     protected void doBind(SocketAddress localAddress) throws Exception {
         if (PlatformDependent.javaVersion() >= 7) {
+            // backlog，也就是允许客户端排队的最大长度
             javaChannel().bind(localAddress, config.getBacklog());
         } else {
             javaChannel().socket().bind(localAddress, config.getBacklog());
@@ -144,11 +145,14 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
+        // 接受客户端的连接
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
             if (ch != null) {
+                // 将 Java的SocketChannel 转化为自己的 NioSocketChannel
                 buf.add(new NioSocketChannel(this, ch));
+                // 最后返回1，表示服务端消息读取成功
                 return 1;
             }
         } catch (Throwable t) {

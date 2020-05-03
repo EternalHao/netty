@@ -49,8 +49,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
-
+    // 满足共用。供上层选择
     private final SelectableChannel ch;
+    // 代表了JDK SelectionKey的OP_READ
     protected final int readInterestOp;
     volatile SelectionKey selectionKey;
     boolean readPending;
@@ -251,7 +252,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                     connectPromise = promise;
                     requestedRemoteAddress = remoteAddress;
 
-                    // Schedule connect timeout.
+                    /**
+                     * 根据连接超时时间设置定时任务，超时时间到之后触发校验，如果发现连接并没有完成，则关闭连接句柄，
+                     * 释放资源，设置异常堆栈并发起去注册
+                     */
                     int connectTimeoutMillis = config().getConnectTimeoutMillis();
                     if (connectTimeoutMillis > 0) {
                         connectTimeoutFuture = eventLoop().schedule(new Runnable() {
@@ -267,6 +271,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                         }, connectTimeoutMillis, TimeUnit.MILLISECONDS);
                     }
 
+                    /**
+                     * 设置连接结果监听器，如果接收到连接完成通知则判断连接是否被取消，
+                     * 如果被取消则关闭连接句柄，释放资源，发起取消注册操作
+                     */
                     promise.addListener(new ChannelFutureListener() {
                         @Override
                         public void operationComplete(ChannelFuture future) throws Exception {
@@ -302,6 +310,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Regardless if the connection attempt was cancelled, channelActive() event should be triggered,
             // because what happened is what happened.
             if (!wasActive && active) {
+                // 触发管道中所有的 ChannelActive事件
+                // 最终会将NioSocketChannel中的 selectionKey设置为SelectionKey.OP_READ，用于监听网络读操作位
                 pipeline().fireChannelActive();
             }
 
@@ -322,6 +332,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             closeIfClosed();
         }
 
+        /**
+         * 客户端接收到服务端的TCP握手应答消息，通过SocketChannel的finishConnect方法对连接结果进行判断
+         */
         @Override
         public final void finishConnect() {
             // Note this method is invoked by the event loop only if the connection attempt was
@@ -332,12 +345,18 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             try {
                 boolean wasActive = isActive();
                 doFinishConnect();
+                // 负责将SocketChannel修改为监听读操作位，用来监听网络的读事件
                 fulfillConnectPromise(connectPromise, wasActive);
             } catch (Throwable t) {
+                // 只要连接失败，就抛出 Error()，由调用方执行句柄关闭等资源释放操作
                 fulfillConnectPromise(connectPromise, annotateConnectException(t, requestedRemoteAddress));
             } finally {
                 // Check for null as the connectTimeoutFuture is only created if a connectTimeoutMillis > 0 is used
                 // See https://github.com/netty/netty/issues/1770
+                /**
+                 * 如果连接超时时仍然没有接收到服务端的 ACK 应答消息，则由定时任务关闭客户端连接，
+                 * 将SocketChannel从Reactor线程的多路复用器上摘除，释放资源
+                 */
                 if (connectTimeoutFuture != null) {
                     connectTimeoutFuture.cancel(false);
                 }
@@ -377,17 +396,28 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                // 将当前的Channel注册到EventLoop的多路复用器上
+                // 注册的是0，说明对任何事件都不感兴趣，仅仅完成注册操作
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
                 if (!selected) {
                     // Force the Selector to select now as the "canceled" SelectionKey may still be
                     // cached and not removed because no Select.select(..) operation was called yet.
+                    /**
+                     * 调用多路复用器的selectNow()方法将已经取消的selectionKey从多路复用器中删除掉。操作成功之后，
+                     * 将selected置为true，说明之前失效的selectionKey已经被删除掉。继续发起下一次注册操作，
+                     */
                     eventLoop().selectNow();
                     selected = true;
                 } else {
                     // We forced a select operation on the selector before but the SelectionKey is still cached
                     // for whatever reason. JDK bug ?
+                    /**
+                     * 如果仍然发生CancelledKeyException异常，说明我们无法删除已经被取消的selectionKey，按照JDK的API说明，
+                     * 这种意外不应该发生。如果发生这种问题，则说明可能NIO的相关类库存在不可恢复的BUG，
+                     * 直接抛出CancelledKeyException异常到上层进行统一处理
+                     */
                     throw e;
                 }
             }
@@ -399,6 +429,13 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         eventLoop().cancel(selectionKey());
     }
 
+    /**
+     * 先判断下Channel是否关闭，如果处于关闭中，则直接返回。获取当前的SelectionKey进行判断，如果可用，
+     * 说明Channel当前状态正常，则可以进行正常的操作位修改。将SelectionKey当前的操作位与读操作位进行按位与操作，
+     * 如果等于0，说明目前并没有设置读操作位，通过interestOps | readInterestOp设置读操作位，
+     * 最后调用selectionKey的interestOps方法重新设置通道的网络操作位，这样就可以监听网络的读事件了
+     * @throws Exception
+     */
     @Override
     protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called

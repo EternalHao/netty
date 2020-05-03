@@ -214,14 +214,22 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf discardReadBytes() {
+        // 没有可重用缓存区
         if (readerIndex == 0) {
             ensureAccessible();
             return this;
         }
 
         if (readerIndex != writerIndex) {
+            /**
+             * 如果读索引大于0且读索引不等于写索引，说明缓冲区中既有已经读取过的被丢弃的缓冲区，也有尚未读取的可读缓冲区。
+             * 调用setBytes(0, this, readerIndex, writerIndex - readerIndex)方法进行字节数组复制。
+             * 将尚未读取的字节数组复制到缓冲区的起始位置，然后重新设置读写索引，读索引设置为0，
+             * 写索引设置为之前的写索引减去读索引（重用的缓冲区长度）
+             */
             setBytes(0, this, readerIndex, writerIndex - readerIndex);
             writerIndex -= readerIndex;
+            // 同时调整标记索引
             adjustMarkers(readerIndex);
             readerIndex = 0;
         } else {
@@ -286,6 +294,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
     final void ensureWritable0(int minWritableBytes) {
         final int writerIndex = writerIndex();
         final int targetCapacity = writerIndex + minWritableBytes;
+        // 总的目标长度 小于 总长度 不扩容
         if (targetCapacity <= capacity()) {
             ensureAccessible();
             return;
@@ -982,6 +991,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf writeByte(int value) {
+        // 容量不够自动扩容
         ensureWritable0(1);
         _setByte(writerIndex++, value);
         return this;
@@ -1127,9 +1137,11 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return writtenBytes;
     }
 
+    // 从SocketChannel中读取L个字节到ByteBuf中，L为ByteBuf可写的字节数
     @Override
     public int writeBytes(ScatteringByteChannel in, int length) throws IOException {
         ensureWritable(length);
+        // 从SocketChannel 中 读取
         int writtenBytes = setBytes(writerIndex, in, length);
         if (writtenBytes > 0) {
             writerIndex += writtenBytes;

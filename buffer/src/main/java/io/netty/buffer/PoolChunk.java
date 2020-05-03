@@ -103,6 +103,20 @@ import java.util.Deque;
  * memoryMap[id]= depth_of_id  is defined above
  * depthMap[id]= x  indicates that the first node which is free to be allocated is at depth x (from root)
  */
+
+/**
+ * Page的大小是4个字节，Chunk的大小是64个字节(4×16)。整棵树有5层，第1层（也就是叶子节点所在的层）用来分配所有Page的内存，
+ * 第4层用来分配2个Page的内存，依次类推。
+ *
+ * 每个节点都记录了自己在整个Memory Arena中的偏移地址，当一个节点代表的内存区域被分配出去之后，这个节点就会被标记为已分配，
+ * 自这个节点以下的所有节点在后面的内存分配请求中都会被忽略。
+ *
+ * 举例来说，当我们请求一个16字节的存储区域时，上面这个树中的第3层中的4个节点中的一个就会被标记为已分配，
+ * 这就表示整个Memroy Arena中有16个字节被分配出去了，新的分配请求只能从剩下的3个节点及其子树中寻找合适的节点。
+ *
+ * 对树的遍历采用深度优先的算法，但是在选择哪个子节点继续遍历时则是随机的，并不像通常的深度优先算法中那样总是访问左边的子节点
+ * @param <T>
+ */
 final class PoolChunk<T> implements PoolChunkMetric {
 
     private static final int INTEGER_SIZE_MINUS_ONE = Integer.SIZE - 1;

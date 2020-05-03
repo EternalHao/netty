@@ -33,10 +33,12 @@ import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.SocketUtils;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
+import sun.nio.ch.SelectorProviderImpl;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.nio.channels.spi.SelectorProvider;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -307,6 +309,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            /**
+             * @see SelectorProviderImpl#openServerSocketChannel() 获取JDK原生的channal
+             * 创建一个唯一的ChannelId，建立一个{@link io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe} 用于操作消息
+             * 创建一个 {@link io.netty.channel.DefaultChannelPipeline} 管道，是一个双向链表，用于过滤所有的进出消息
+             * 创建一个 {@link io.netty.channel.socket.nio.NioServerSocketChannel.NioServerSocketChannelConfig}
+             * 对象，用于对外展示一些配置
+             */
             channel = channelFactory.newChannel();
             init(channel);
         } catch (Throwable t) {

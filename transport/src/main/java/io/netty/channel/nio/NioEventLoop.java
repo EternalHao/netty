@@ -53,6 +53,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@link SingleThreadEventLoop} implementation which register the {@link Channel}'s to a
  * {@link Selector} and so does the multi-plexing of these in the event loop.
  *
+ * 不是一个纯粹的I/O线程，它除了负责I/O的读写之外，还兼顾处理以下两类任务。
+ *
+ *  系统Task：通过调用NioEventLoop的execute(Runnable task)方法实现，Netty有很多系统Task，
+ *           创建它们的主要原因是：当I/O线程和用户线程同时操作网络资源时，为了防止并发操作导致的锁竞争，
+ *           将用户线程的操作封装成Task放入消息队列中，由I/O线程负责执行，这样就实现了局部无锁化。
+ *  定时任务：通过调用NioEventLoop的schedule(Runnable command, long delay, TimeUnit unit)方法实现。
  */
 public final class NioEventLoop extends SingleThreadEventLoop {
 
@@ -174,10 +180,16 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         } catch (IOException e) {
             throw new ChannelException("failed to open a new selector", e);
         }
-
+        // 如果没有开启selectedKeys优化开关，通过provider.openSelector()创建并打开多路复用器之后就立即返回
         if (DISABLE_KEY_SET_OPTIMIZATION) {
             return new SelectorTuple(unwrappedSelector);
         }
+
+        /**
+         * 如果开启了优化开关，需要通过反射的方式从Selector实例中获取selectedKeys和publicSelectedKeys，
+         * 将上述两个成员变量设置为可写，通过反射的方式使用Netty构造的selectedKeys包装类selectedKeySet
+         * 将原JDK的selectedKeys替换掉
+         */
 
         Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
@@ -369,6 +381,11 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         return selector.keys().size() - cancelledKeys;
     }
 
+    /**
+     * 首先通过inEventLoop()方法判断是否是其他线程发起的rebuildSelector，如果由其他线程发起，
+     * 为了避免多线程并发操作Selector和其他资源，需要将rebuildSelector封装成Task，放到NioEventLoop的消息队列中，
+     * 由NioEventLoop线程负责调用，这样就避免了多线程并发操作导致的线程安全问题
+     */
     private void rebuildSelector0() {
         final Selector oldSelector = selector;
         final SelectorTuple newSelectorTuple;
@@ -467,6 +484,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 } catch (IOException e) {
                     // If we receive an IOException here its because the Selector is messed up. Let's rebuild
                     // the selector and retry. https://github.com/netty/netty/issues/8566
+                    // 触发了JDK的epoll bug，它会导致Selector的空轮询
                     rebuildSelector0();
                     selectCnt = 0;
                     handleLoopException(e);
@@ -571,10 +589,14 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * 如果轮询到了处于就绪状态的SocketChannel，则需要处理网络I/O事件
+     */
     private void processSelectedKeys() {
         if (selectedKeys != null) {
             processSelectedKeysOptimized();
         } else {
+            // 默认走这里
             processSelectedKeysPlain(selector.selectedKeys());
         }
     }
@@ -601,16 +623,21 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         // check if the set is empty and if so just return to not create garbage by
         // creating a new Iterator every time even if there is nothing to process.
         // See https://github.com/netty/netty/issues/597
+        // 对SelectionKey进行保护性判断，如果为空则返回
         if (selectedKeys.isEmpty()) {
             return;
         }
 
+        /**
+         * 获取SelectionKey的迭代器进行循环操作，通过迭代器获取SelectionKey和SocketChannel的附件对象，
+         * 将已选择的选择键从迭代器中删除，防止下次被重复选择和处理
+         */
         Iterator<SelectionKey> i = selectedKeys.iterator();
         for (;;) {
             final SelectionKey k = i.next();
             final Object a = k.attachment();
             i.remove();
-
+            // 如果是AbstractNioChannel类型，说明它是NioServerSocketChannel或者NioSocketChannel，需要进行I/O读写相关的操作
             if (a instanceof AbstractNioChannel) {
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {

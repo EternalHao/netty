@@ -52,7 +52,9 @@ import java.util.List;
  * +--------+----------------+
  * </pre>
  */
-@Sharable
+@Sharable // 和其他piepline 共享
+// 如果协议中的第一个字段为长度字段，Netty提供了LengthFieldPrepender编码器，
+// 它可以计算当前待发送消息的二进制字节长度，将该长度添加到ByteBuf的缓冲区头中
 public class LengthFieldPrepender extends MessageToMessageEncoder<ByteBuf> {
 
     private final ByteOrder byteOrder;

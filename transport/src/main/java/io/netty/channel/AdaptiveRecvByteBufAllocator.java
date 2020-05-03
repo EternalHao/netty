@@ -32,6 +32,11 @@ import static java.lang.Math.min;
  * amount of the allocated buffer two times consecutively.  Otherwise, it keeps
  * returning the same prediction.
  */
+// 缓冲区大小可以动态调整的ByteBuf分配器
+
+// 向量数组的每个值都对应一个Buffer容量，当容量小于512的时候，由于缓冲区已经比较小，需要降低步进值，
+// 容量每次下调的幅度要小些；当大于512时，说明需要解码的消息码流比较大，这时采用调大步进幅度的方式减少动态扩张的频率，
+// 所以它采用512的倍数进行扩张
 public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufAllocator {
 
     static final int DEFAULT_MINIMUM = 64;
@@ -65,6 +70,8 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     @Deprecated
     public static final AdaptiveRecvByteBufAllocator DEFAULT = new AdaptiveRecvByteBufAllocator();
 
+
+    // 根据容量Size查找容量向量表对应的索引——这是个典型的二分查找法
     private static int getSizeTableIndex(final int size) {
         for (int low = 0, high = SIZE_TABLE.length - 1;;) {
             if (high < low) {
@@ -121,6 +128,17 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             return nextReceiveBufferSize;
         }
 
+        /**
+         * 当NioSocketChannel执行完读操作后，会计算获得本次轮询读取的总字节数，它就是参数actualReadBytes，
+         * 执行record方法，根据实际读取的字节数对ByteBuf进行动态伸缩和扩张
+         *
+         * 首先，对当前索引做步进缩减，然后获取收缩后索引对应的容量，与实际读取的字节数进行比对，
+         * 如果发现小于收缩后的容量，则重新对当前索引进行赋值，取收缩后的索引和最小索引中的较大者作为最新的索引。
+         * 然后，为下一次缓冲区容量分配赋值——新的索引对应容量向量表中的容量。相反，如果当前实际读取的字节数大于之前预分配的初始容量，
+         * 则说明实际分配的容量不足，需要动态扩张。重新计算索引，选取当前索引+扩张步进和最大索引中的较小作为当前索引值，
+         * 然后对下次缓冲区的容量值进行重新分配，完成缓冲区容量的动态扩张
+         * @param actualReadBytes
+         */
         private void record(int actualReadBytes) {
             if (actualReadBytes <= SIZE_TABLE[max(0, index - INDEX_DECREMENT)]) {
                 if (decreaseNow) {

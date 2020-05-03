@@ -65,6 +65,7 @@ import java.util.Queue;
  * transfer.  To resume the transfer when a new chunk is available, you have to
  * call {@link #resumeTransfer()}.
  */
+// 支持异步发送大的码流（例如大的文件传输），但不占用过多的内存，防止发生Java内存溢出错误
 public class ChunkedWriteHandler extends ChannelDuplexHandler {
 
     private static final InternalLogger logger =

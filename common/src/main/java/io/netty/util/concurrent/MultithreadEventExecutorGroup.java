@@ -63,7 +63,8 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      *
      * @param nThreads          the number of threads that will be used by this instance.
      * @param executor          the Executor to use, or {@code null} if the default should be used.
-     * @param chooserFactory    the {@link EventExecutorChooserFactory} to use.
+     * {@link ThreadPerTaskExecutor}
+     * @param chooserFactory    the singleton {@link EventExecutorChooserFactory} to use.
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
@@ -75,9 +76,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         if (executor == null) {
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
-
+        // 创建指定线程数的执行器数组
         children = new EventExecutor[nThreads];
 
+        // 初始化线程组
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
@@ -120,6 +122,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         };
 
         for (EventExecutor e: children) {
+            // 为每个单例线程池 添加一个关闭监听起
             e.terminationFuture().addListener(terminationListener);
         }
 

@@ -74,15 +74,35 @@ import java.net.SocketAddress;
  * resources once you are done with the {@link Channel}. This ensures all resources are
  * released in a proper way, i.e. filehandles.
  */
+// 包括但不限于网路的读、写，客户端发起连接、主动关闭连接，链路关闭，获取通信双方的网络地址等
+// 。它也包含了Netty框架相关的一些功能，包括获取该Chanel的EventLoop，
+// 获取缓冲分配器ByteBufAllocator和pipeline等。
 public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparable<Channel> {
 
     /**
      * Returns the globally unique identifier of this {@link Channel}.
+     * 可能生成策略如下。
+     *
+     * （1）机器的MAC地址（EUI-48或者EUI-64）等可以代表全局唯一的信息；
+     *
+     * （2）当前的进程ID；
+     *
+     * （3）当前系统时间的毫秒——System.currentTimeMillis()；
+     *
+     * （4）当前系统时间纳秒数——System.nanoTime()；
+     *
+     * （5）32位的随机整型数；
+     *
+     * （6）32位自增的序列数。
      */
     ChannelId id();
 
     /**
      * Return the {@link EventLoop} this {@link Channel} was registered to.
+     *
+     * Channel需要注册到EventLoop的多路复用器上，用于处理I/O事件，
+     * 通过eventLoop()方法可以获取到Channel注册的EventLoop。EventLoop本质上就是处理网络读写事件的Reactor线程。
+     * 在Netty中，它不仅仅用来处理网络事件，也可以用来执行定时任务和用户自定义NioTask等任务
      */
     EventLoop eventLoop();
 
@@ -116,6 +136,10 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
 
     /**
      * Return the {@link ChannelMetadata} of the {@link Channel} which describe the nature of the {@link Channel}.
+     * 熟悉TCP协议的读者可能知道，当创建Socket的时候需要指定TCP参数，例如接收和发送的TCP缓冲区大小，TCP的超时时间，是否重用地址等等。
+     * 在Netty中，每个Channel对应一个物理连接，每个连接都有自己的TCP参数配置。
+     * 所以，Channel会聚合一个ChannelMetadata用来对TCP参数提供元数据描述信息，
+     * 通过metadata()方法就可以获取当前Channel的TCP参数配置
      */
     ChannelMetadata metadata();
 

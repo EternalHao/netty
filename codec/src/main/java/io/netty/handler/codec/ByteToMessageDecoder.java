@@ -72,6 +72,7 @@ import static java.lang.Integer.MAX_VALUE;
  * is not released or added to the <tt>out</tt> {@link List}. Use derived buffers like {@link ByteBuf#readSlice(int)}
  * to avoid leaking memory.
  */
+// 将ByteBuf解码成业务POJO对象 其实就是handler
 public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter {
 
     /**
@@ -267,6 +268,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        // 首先判断需要解码的msg对象是否是ByteBuf，如果是ByteBuf才需要进行解码，否则直接透传
         if (msg instanceof ByteBuf) {
             CodecOutputList out = CodecOutputList.newInstance();
             try {

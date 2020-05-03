@@ -306,14 +306,22 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
 
     @Override
     protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddress) throws Exception {
+        // 绑定本地Socket地址
         if (localAddress != null) {
             doBind0(localAddress);
         }
 
         boolean success = false;
         try {
+            /**
+             * 连接远程服务器
+             *  (1）连接成功，返回true；
+             * （2）暂时没有连接上，服务端没有返回ACK应答，连接结果不确定，返回false；
+             * （3）连接失败，直接抛出I/O异常。
+             */
             boolean connected = SocketUtils.connect(javaChannel(), remoteAddress);
             if (!connected) {
+                // 继续监听连接网络操作位
                 selectionKey().interestOps(SelectionKey.OP_CONNECT);
             }
             success = true;
@@ -342,7 +350,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         super.doClose();
         javaChannel().close();
     }
-
+   // NioSocketChannel的读写操作实际上是基于NIO的SocketChannel和Netty的ByteBuf封装而成
     @Override
     protected int doReadBytes(ByteBuf byteBuf) throws Exception {
         final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
@@ -375,6 +383,12 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         }
     }
 
+    /**
+     *
+     * @param in
+     * @throws Exception
+     */
+    // TODO 研究
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         SocketChannel ch = javaChannel();

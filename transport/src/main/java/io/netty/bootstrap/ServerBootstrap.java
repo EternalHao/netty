@@ -58,6 +58,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     private ServerBootstrap(ServerBootstrap bootstrap) {
         super(bootstrap);
+        // workGroup
         childGroup = bootstrap.childGroup;
         childHandler = bootstrap.childHandler;
         synchronized (bootstrap.childOptions) {
@@ -129,6 +130,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 设置TCP属性
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, attrs0().entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY));
 

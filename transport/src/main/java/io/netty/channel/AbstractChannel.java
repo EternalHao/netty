@@ -449,6 +449,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             return remoteAddress0();
         }
 
+        /**
+         * register方法主要用于将当前Unsafe对应的Channel注册到EventLoop的多路复用器上，
+         * 然后调用DefaultChannelPipeline的fireChannelRegistered方法。
+         * 如果Channel被激活，则调用DefaultChannelPipeline的fireChannelActive方法
+         * @param eventLoop
+         * @param promise
+         */
         @Override
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
             ObjectUtil.checkNotNull(eventLoop, "eventLoop");
@@ -463,10 +470,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             AbstractChannel.this.eventLoop = eventLoop;
-
+            /**
+             * 首先判断当前所在的线程是否是Channel对应的NioEventLoop线程，如果是同一个线程则不存在多线程并发操作问题，
+             * 直接调用register0进行注册
+             */
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
+                /**
+                 * 如果是由用户线程或者其他线程发起的注册操作，则将注册操作封装成Runnable，放到NioEventLoop任务队列中执行
+                 */
                 try {
                     eventLoop.execute(new Runnable() {
                         @Override

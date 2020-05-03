@@ -247,6 +247,17 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         return StringUtil.simpleClassName(this) + "(directByDefault: " + directByDefault + ')';
     }
 
+    /**
+     * 采用先倍增后步进的原因如下：当内存比较小的情况下，倍增操作并不会带来太多的内存浪费，
+     * 例如64字节--＞128字节--＞256字节，这样的内存扩张方式对于大多数应用系统是可以接受的。
+     * 但是，当内存增长到一定阈值后，再进行倍增就可能会带来额外的内存浪费，例如10M，采用倍增后变为20M，
+     * 很有可能系统只需要12M，扩张到20M后会带来8M的内存浪费。由于每个客户端连接都可能维护自己独立的接收和发送缓冲区，
+     * 这样随着客户读的线性增长，内存浪费也会成比例的增加，因此，达到某个阈值后就需要以步进的方式对内存进行平滑地扩张。
+     *
+     * @param minNewCapacity
+     * @param maxCapacity
+     * @return
+     */
     @Override
     public int calculateNewCapacity(int minNewCapacity, int maxCapacity) {
         checkPositiveOrZero(minNewCapacity, "minNewCapacity");
@@ -257,11 +268,17 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         }
         final int threshold = CALCULATE_THRESHOLD; // 4 MiB page
 
+        // 当需要的新容量正好等于门限阈值，则使用阈值作为新的缓冲区容量
         if (minNewCapacity == threshold) {
             return threshold;
         }
 
         // If over threshold, do not double but just increase by threshold.
+        /**
+         * 如果新申请的内存空间大于阈值，不能采用倍增的方式（防止内存膨胀和浪费）扩张内存，
+         * 采用每次步进4M的方式进行内存扩张。扩张的时候需要对扩张后的内存和最大内存（maxCapacity）进行比较，
+         * 如果大于缓冲区的最大长度，则使用maxCapacity作为扩容后的缓冲区容量
+         */
         if (minNewCapacity > threshold) {
             int newCapacity = minNewCapacity / threshold * threshold;
             if (newCapacity > maxCapacity - threshold) {
@@ -275,6 +292,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         // Not over threshold. Double up to 4 MiB, starting from 64.
         int newCapacity = 64;
         while (newCapacity < minNewCapacity) {
+            // 每次增加64KB
             newCapacity <<= 1;
         }
 

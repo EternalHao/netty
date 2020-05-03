@@ -36,7 +36,7 @@ import java.nio.charset.UnsupportedCharsetException;
  *
  * <h3>Creation of a buffer</h3>
  *
- * It is recommended to create a new buffer using the helper methods in
+ * It is recommended to create a new buffer using the helper methods in¸
  * {@link Unpooled} rather than calling an individual implementation's
  * constructor.
  *
@@ -860,6 +860,7 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      *         if {@code dstIndex + length} is greater than
      *            {@code dst.capacity}
      */
+    // 从当前的读索引开始，复制length个字节到目标byte数组中，由于不同的子类复制操作的技术实现细节不同，因此该方法由子类实现
     public abstract ByteBuf getBytes(int index, ByteBuf dst, int dstIndex, int length);
 
     /**

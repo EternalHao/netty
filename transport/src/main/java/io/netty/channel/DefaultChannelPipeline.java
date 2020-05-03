@@ -61,7 +61,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private static final AtomicReferenceFieldUpdater<DefaultChannelPipeline, MessageSizeEstimator.Handle> ESTIMATOR =
             AtomicReferenceFieldUpdater.newUpdater(
                     DefaultChannelPipeline.class, MessageSizeEstimator.Handle.class, "estimatorHandle");
+    // 对应 HeadHandler
     final AbstractChannelHandlerContext head;
+    // 对应 TailHandler
     final AbstractChannelHandlerContext tail;
 
     private final Channel channel;
@@ -224,6 +226,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return this;
     }
 
+    /**
+     * 链表操作  pipeline是一个双向链表，并且，他本身就初始化了head和tail节点
+     * 就是将 handler插入到 tail的前面，因为tail永远在后面，需要做一些系统的固定的工作
+     * @param newCtx
+     */
     private void addLast0(AbstractChannelHandlerContext newCtx) {
         AbstractChannelHandlerContext prev = tail.prev;
         newCtx.prev = prev;
@@ -242,6 +249,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             EventExecutorGroup group, String baseName, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         final AbstractChannelHandlerContext ctx;
+        // 保证线程安全
         synchronized (this) {
             checkMultiplicity(handler);
             name = filterName(name, handler);

@@ -23,6 +23,7 @@ import java.util.Map;
 
 /**
  * Skeleton implementation of a {@link ChannelHandler}.
+ * 方便用户使用
  */
 public abstract class ChannelHandlerAdapter implements ChannelHandler {
 
@@ -85,7 +86,7 @@ public abstract class ChannelHandlerAdapter implements ChannelHandler {
      *
      * @deprecated is part of {@link ChannelInboundHandler}
      */
-    @Skip
+    @Skip // 该方法会在传递的过程中忽略
     @Override
     @Deprecated
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {

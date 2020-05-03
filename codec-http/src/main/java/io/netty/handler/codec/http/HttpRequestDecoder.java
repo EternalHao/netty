@@ -51,6 +51,12 @@ import io.netty.handler.codec.TooLongFrameException;
  *     after this decoder in the {@link ChannelPipeline}.</td>
  * </tr>
  * </table>
+ *
+ * HTTP解码器在 每个HTTP消息中会生成多个消息对象。
+ * （1）HttpRequest / HttpResponse；
+ * （2）HttpContent；
+ * （3）LastHttpContent
+ * 可以添加了HttpObjectAggregator解码器，它的作用是将多个消息转换为单一的FullHttpRequest或者FullHttpResponse
  */
 public class HttpRequestDecoder extends HttpObjectDecoder {
 

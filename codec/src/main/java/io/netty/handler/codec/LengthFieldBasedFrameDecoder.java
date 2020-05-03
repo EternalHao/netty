@@ -184,6 +184,7 @@ import io.netty.channel.ChannelHandlerContext;
  * </pre>
  * @see LengthFieldPrepender
  */
+// 最通用的半包解码器- 基于消息长度的半包解码器
 public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
 
     private final ByteOrder byteOrder;
@@ -393,7 +394,7 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
      * @return  frame           the {@link ByteBuf} which represent the frame or {@code null} if no frame could
      *                          be created.
      */
-    protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+    protected Object NioEventLoopdecode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
         if (discardingTooLongFrame) {
             discardingTooLongFrame(in);
         }

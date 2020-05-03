@@ -46,6 +46,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             " (expected: " + StringUtil.simpleClassName(ByteBuf.class) + ", " +
             StringUtil.simpleClassName(FileRegion.class) + ')';
 
+    // 负责继续写半包消息
     private final Runnable flushTask = new Runnable() {
         @Override
         public void run() {
@@ -209,6 +210,14 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         return doWriteInternal(in, in.current());
     }
 
+    /**
+     * 先判断需要发送的消息是否是ByteBuf类型，如果是，则进行强制类型转换，将其转换成ByteBuf类型，
+     * 判断当前消息的可读字节数是否为0，如果为0，说明该消息不可读，需要丢弃。从环形发送数组中删除该消息，继续循环处理其他的消息
+     * @param in
+     * @param msg
+     * @return
+     * @throws Exception
+     */
     private int doWriteInternal(ChannelOutboundBuffer in, Object msg) throws Exception {
         if (msg instanceof ByteBuf) {
             ByteBuf buf = (ByteBuf) msg;
@@ -247,6 +256,12 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         return WRITE_STATUS_SNDBUF_FULL;
     }
 
+    /**
+     * 从发送消息环形数组ChannelOutboundBuffer弹出一条消息，判断该消息是否为空，如果为空，
+     * 说明消息发送数组中所有待发送的消息都已经发送完成，清除半包标识，然后退出循环
+     * @param in
+     * @throws Exception
+     */
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         int writeSpinCount = config().getWriteSpinCount();
@@ -283,6 +298,19 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPES);
     }
 
+    /**
+     * 调用doWriteBytes进行消息发送，不同的Channel子类有不同的实现，因此它是抽象方法。如果本次发送的字节数为0，
+     * 说明发送TCP缓冲区已满，发生了ZERO_WINDOW。此时再次发送仍然可能出现写0字节，空循环会占用CPU的资源，
+     * 导致I/O线程无法处理其他I/O操作，所以将写半包标识setOpWrite设置为true，退出循环，释放I/O线程。
+     *
+     * 如果发送的字节数大于0，则对发送总数进行计数。判断当前消息是否已经发送成功（缓冲区没有可读字节），
+     * 如果发送成功则设置done为true，退出当前循环。
+     *
+     * 消息发送操作完成之后调用ChannelOutboundBuffer更新发送进度信息，然后对发送结果进行判断。
+     * 如果发送成功，则将已经发送的消息从发送数组中删除；否则调用incompleteWrite方法，设置写半包标识，
+     * 启动刷新线程继续发送之前没有发送完全的半包消息（写半包）
+     * @param setOpWrite
+     */
     protected final void incompleteWrite(boolean setOpWrite) {
         // Did not write completely.
         if (setOpWrite) {
@@ -333,6 +361,11 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         }
     }
 
+    /**
+     * 从当前SelectionKey中获取网络操作位，然后与SelectionKey.OP_WRITE做按位与，如果不等于0，
+     * 说明当前的SelectionKey是isWritable的，需要清除写操作位。清除方法很简单，
+     * 就是SelectionKey.OP_WRITE取非之后与原操作位做按位与操作，清除SelectionKey的写操作位
+     */
     protected final void clearOpWrite() {
         final SelectionKey key = selectionKey();
         // Check first if the key is still valid as it may be canceled as part of the deregistration

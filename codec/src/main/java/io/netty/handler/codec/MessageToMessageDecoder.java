@@ -49,6 +49,16 @@ import java.util.List;
  * {@link ReferenceCounted#release()} on decoded messages.
  *
  */
+// 将一个对象二次解码为其他对象
+
+/**
+ * 为什么称它为二次解码器呢？我们知道，从SocketChannel读取到的TCP数据报是ByteBuffer，实际就是字节数组，
+ * 我们首先需要将ByteBuffer缓冲区中的数据报读取出来，并将其解码为Java对象；然后对Java对象根据某些规则做二次解码，
+ * 将其解码为另一个POJO对象。因为MessageToMessageDecoder在ByteToMessageDecoder之后，所以称之为二次解码器
+ *
+ * 没有半包问题
+ * @param <I>
+ */
 public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAdapter {
 
     private final TypeParameterMatcher matcher;
